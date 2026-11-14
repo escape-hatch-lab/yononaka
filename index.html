@@ -40,6 +40,15 @@
   .col div{border-radius:3px 3px 0 0;min-height:2px}
   .axis{display:flex;justify-content:space-between;color:var(--sub);font-size:.75rem;margin-top:4px}
   .note{color:var(--sub);font-size:.8rem;margin-top:12px}
+  .stack{display:flex;flex-direction:column;gap:16px;min-width:0}
+  .qrow{display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+  .qrow:last-child{border-bottom:none}
+  .mag{flex:none;width:3.2em;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;color:#111;border-radius:6px;padding:2px 0}
+  .qbody{flex:1;min-width:0}
+  .qplace{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.9rem}
+  .qplace a{color:var(--text);text-decoration:none}
+  .qplace a:hover{text-decoration:underline}
+  .qtime{color:var(--sub);font-size:.75rem}
   .err{color:#ef4444;font-size:.9rem}
   footer{margin-top:24px;color:var(--sub);font-size:.8rem}
   footer a{color:var(--sub)}
@@ -69,6 +78,7 @@
       <div id="wiki-list"></div>
     </section>
 
+    <div class="stack">
     <section class="card">
       <h2>宇宙天気(地磁気の乱れ)</h2>
       <div class="meta" id="kp-meta">読み込み中…</div>
@@ -80,11 +90,20 @@
       <div class="axis"><span id="kp-from"></span><span>直近3日間(3時間ごとのKp指数)</span><span id="kp-to"></span></div>
       <p class="note">Kp指数は0〜9。5以上は「磁気嵐」で、GPSの精度低下や高緯度でのオーロラ出現につながります。</p>
     </section>
+
+    <section class="card">
+      <h2>世界の地震(過去24時間)</h2>
+      <div class="meta" id="eq-meta">読み込み中…</div>
+      <div id="eq-list"></div>
+      <p class="note">マグニチュード4.5以上の地震を、規模の大きい順に表示しています。場所名は英語表記です。</p>
+    </section>
+    </div>
   </div>
 
   <footer>
     データ: <a href="https://wikimedia.org/api/rest_v1/" target="_blank" rel="noopener">Wikimedia REST API</a> /
-    <a href="https://www.swpc.noaa.gov/" target="_blank" rel="noopener">NOAA SWPC</a>
+    <a href="https://www.swpc.noaa.gov/" target="_blank" rel="noopener">NOAA SWPC</a> /
+    <a href="https://earthquake.usgs.gov/" target="_blank" rel="noopener">USGS</a>
   </footer>
 </main>
 
@@ -203,9 +222,63 @@
     }
   }
 
+  // ---------- USGS Earthquakes ----------
+  function magColor(m){
+    if(m >= 7) return 'var(--g3)';
+    if(m >= 6) return 'var(--g2)';
+    if(m >= 5) return 'var(--g1)';
+    return 'var(--g0)';
+  }
+  async function renderQuakes(){
+    const meta = document.getElementById('eq-meta');
+    const list = document.getElementById('eq-list');
+    try{
+      const r = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson');
+      if(!r.ok) throw new Error('http ' + r.status);
+      const j = await r.json();
+      const all = j.features
+        .map(f => ({ mag:f.properties.mag, place:f.properties.place || '', time:f.properties.time, url:f.properties.url || '' }))
+        .filter(q => typeof q.mag === 'number')
+        .sort((a,b) => b.mag - a.mag);
+      list.textContent = '';
+      if(all.length === 0){
+        meta.textContent = '過去24時間にM4.5以上の地震はありません。';
+        return;
+      }
+      const top = all.slice(0,10);
+      meta.textContent = `M4.5以上: 計${all.length}件(上位${top.length}件を表示)`;
+      top.forEach(q => {
+        const row = document.createElement('div'); row.className = 'qrow';
+        const mag = document.createElement('span'); mag.className = 'mag';
+        mag.textContent = q.mag.toFixed(1); mag.style.background = magColor(q.mag);
+        const body = document.createElement('div'); body.className = 'qbody';
+        const place = document.createElement('div'); place.className = 'qplace';
+        if(q.url.startsWith('https://earthquake.usgs.gov/')){
+          const a = document.createElement('a');
+          a.href = q.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = q.place;
+          place.appendChild(a);
+        }else{
+          place.textContent = q.place;
+        }
+        const time = document.createElement('div'); time.className = 'qtime';
+        time.textContent = new Date(q.time).toLocaleString('ja-JP');
+        body.append(place, time);
+        row.append(mag, body);
+        list.appendChild(row);
+      });
+    }catch(e){
+      meta.textContent = '';
+      list.textContent = '';
+      const p = document.createElement('div'); p.className = 'err';
+      p.textContent = 'USGSのデータを取得できませんでした。時間をおいて再読み込みしてください。';
+      list.appendChild(p);
+    }
+  }
+
   document.getElementById('lang').addEventListener('change', renderWiki);
   renderWiki();
   renderKp();
+  renderQuakes();
 })();
 </script>
 </body>
