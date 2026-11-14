@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>今日の世の中</title>
+<style>
+  :root{
+    --bg:#f7f7f5; --card:#ffffff; --text:#1f2328; --sub:#6b7280; --line:#e5e7eb;
+    --accent:#3b82f6; --g0:#34d399; --g1:#fbbf24; --g2:#f97316; --g3:#ef4444;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#111418; --card:#1a1f26; --text:#e6e8eb; --sub:#9aa3af; --line:#2a313a; --accent:#60a5fa; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;line-height:1.5}
+  main{max-width:960px;margin:0 auto;padding:24px 16px 48px}
+  h1{font-size:1.5rem;margin:0 0 4px}
+  .lead{color:var(--sub);margin:0 0 20px;font-size:.9rem}
+  .grid{display:grid;grid-template-columns:1fr;gap:16px}
+  @media(min-width:800px){.grid{grid-template-columns:1fr 1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h2{font-size:1.05rem;margin:0 0 2px}
+  .meta{color:var(--sub);font-size:.8rem;margin-bottom:12px}
+  .row{display:flex;gap:8px;align-items:center;padding:4px 0}
+  .rank{width:1.6em;text-align:right;color:var(--sub);font-variant-numeric:tabular-nums;flex:none}
+  .bar-wrap{position:relative;flex:1;min-width:0;height:28px;background:transparent;border-radius:6px;overflow:hidden}
+  .bar{position:absolute;inset:0 auto 0 0;background:var(--accent);opacity:.18;border-radius:6px}
+  .title{position:relative;z-index:1;padding:0 8px;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .title a{color:var(--text);text-decoration:none}
+  .title a:hover{text-decoration:underline}
+  .views{flex:none;color:var(--sub);font-size:.8rem;font-variant-numeric:tabular-nums;width:6.5em;text-align:right}
+  select{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:.85rem}
+  .head{display:flex;justify-content:space-between;align-items:start;gap:8px}
+  .kp-now{display:flex;align-items:baseline;gap:10px;margin:4px 0 12px}
+  .kp-num{font-size:2.6rem;font-weight:700;font-variant-numeric:tabular-nums}
+  .kp-label{font-size:.95rem}
+  .chart{display:flex;align-items:flex-end;gap:2px;height:140px;border-bottom:1px solid var(--line);padding-top:8px}
+  .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+  .col div{border-radius:3px 3px 0 0;min-height:2px}
+  .axis{display:flex;justify-content:space-between;color:var(--sub);font-size:.75rem;margin-top:4px}
+  .note{color:var(--sub);font-size:.8rem;margin-top:12px}
+  .err{color:#ef4444;font-size:.9rem}
+  footer{margin-top:24px;color:var(--sub);font-size:.8rem}
+  footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<main>
+  <h1>今日の世の中</h1>
+  <p class="lead">人々の関心(Wikipedia)と、地球を取り巻く環境(宇宙天気)を、ひと目で。</p>
+
+  <div class="grid">
+    <section class="card">
+      <div class="head">
+        <div>
+          <h2>みんなが読んだ記事</h2>
+          <div class="meta" id="wiki-meta">読み込み中…</div>
+        </div>
+        <select id="lang" aria-label="言語版">
+          <option value="ja">日本語版</option>
+          <option value="en">英語版</option>
+          <option value="ko">韓国語版</option>
+          <option value="de">ドイツ語版</option>
+          <option value="fr">フランス語版</option>
+          <option value="es">スペイン語版</option>
+        </select>
+      </div>
+      <div id="wiki-list"></div>
+    </section>
+
+    <section class="card">
+      <h2>宇宙天気(地磁気の乱れ)</h2>
+      <div class="meta" id="kp-meta">読み込み中…</div>
+      <div class="kp-now">
+        <span class="kp-num" id="kp-num">–</span>
+        <span class="kp-label" id="kp-label"></span>
+      </div>
+      <div class="chart" id="kp-chart"></div>
+      <div class="axis"><span id="kp-from"></span><span>直近3日間(3時間ごとのKp指数)</span><span id="kp-to"></span></div>
+      <p class="note">Kp指数は0〜9。5以上は「磁気嵐」で、GPSの精度低下や高緯度でのオーロラ出現につながります。</p>
+    </section>
+  </div>
+
+  <footer>
+    データ: <a href="https://wikimedia.org/api/rest_v1/" target="_blank" rel="noopener">Wikimedia REST API</a> /
+    <a href="https://www.swpc.noaa.gov/" target="_blank" rel="noopener">NOAA SWPC</a>
+  </footer>
+</main>
+
+<script>
+(function(){
+  const fmt = n => n.toLocaleString('ja-JP');
+  const pad = n => String(n).padStart(2,'0');
+  const EXCLUDE = /^(メインページ|Main_Page|Hauptseite|Accueil|Portada|특별:|特別:|Special:|Spezial:|Spécial:|Especial:|Wikipedia:|ウィキペディア:|Wikipédia:|Category:|カテゴリ:|Template:|File:|ファイル:|Help:|Portal:|-$)/;
+
+  // ---------- Wikipedia ----------
+  async function loadWiki(lang){
+    for(let back=1; back<=4; back++){
+      const d = new Date(Date.now() - back*864e5);
+      const y = d.getUTCFullYear(), m = pad(d.getUTCMonth()+1), dd = pad(d.getUTCDate());
+      const url = `https://wikimedia.org/api/rest_v1/metrics/pageviews/top/${lang}.wikipedia/all-access/${y}/${m}/${dd}`;
+      try{
+        const r = await fetch(url);
+        if(!r.ok) continue;
+        const j = await r.json();
+        const items = j.items[0].articles.filter(a => !EXCLUDE.test(a.article)).slice(0,20);
+        return { date: `${y}-${m}-${dd}`, items };
+      }catch(e){ /* try the previous day */ }
+    }
+    throw new Error('wiki fetch failed');
+  }
+
+  async function renderWiki(){
+    const lang = document.getElementById('lang').value;
+    const meta = document.getElementById('wiki-meta');
+    const list = document.getElementById('wiki-list');
+    meta.textContent = '読み込み中…';
+    list.textContent = '';
+    try{
+      const { date, items } = await loadWiki(lang);
+      meta.textContent = `${date}(UTC)の閲覧数 上位${items.length}件`;
+      const max = items[0].views;
+      items.forEach((a, i) => {
+        const name = a.article.replace(/_/g,' ');
+        const row = document.createElement('div'); row.className = 'row';
+        const rank = document.createElement('span'); rank.className = 'rank'; rank.textContent = i+1;
+        const wrap = document.createElement('div'); wrap.className = 'bar-wrap';
+        const bar = document.createElement('div'); bar.className = 'bar'; bar.style.width = (a.views/max*100)+'%';
+        const title = document.createElement('div'); title.className = 'title';
+        const link = document.createElement('a');
+        link.href = `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(a.article)}`;
+        link.target = '_blank'; link.rel = 'noopener'; link.textContent = name;
+        title.appendChild(link);
+        wrap.append(bar, title);
+        const views = document.createElement('span'); views.className = 'views'; views.textContent = fmt(a.views);
+        row.append(rank, wrap, views);
+        list.appendChild(row);
+      });
+    }catch(e){
+      meta.textContent = '';
+      const p = document.createElement('div'); p.className = 'err';
+      p.textContent = 'Wikipediaのデータを取得できませんでした。時間をおいて再読み込みしてください。';
+      list.appendChild(p);
+    }
+  }
+
+  // ---------- NOAA Kp ----------
+  function kpInfo(k){
+    if(k >= 9) return { c:'var(--g3)', t:'G5 超大規模な磁気嵐' };
+    if(k >= 8) return { c:'var(--g3)', t:'G4 大規模な磁気嵐' };
+    if(k >= 7) return { c:'var(--g3)', t:'G3 強い磁気嵐' };
+    if(k >= 6) return { c:'var(--g2)', t:'G2 中程度の磁気嵐' };
+    if(k >= 5) return { c:'var(--g2)', t:'G1 小規模な磁気嵐' };
+    if(k >= 4) return { c:'var(--g1)', t:'やや活発' };
+    return { c:'var(--g0)', t:'静穏' };
+  }
+  function parseKp(json){
+    let rows;
+    if(Array.isArray(json) && Array.isArray(json[0])){
+      const head = json[0];
+      const ti = head.indexOf('time_tag'), ki = head.indexOf('Kp');
+      rows = json.slice(1).map(r => ({ t:r[ti], k:parseFloat(r[ki]) }));
+    }else{
+      rows = json.map(o => ({ t:o.time_tag, k:parseFloat(o.Kp ?? o.kp_index) }));
+    }
+    return rows.filter(r => r.t && !isNaN(r.k));
+  }
+  function toDate(s){ return new Date(s.replace(' ','T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? '' : 'Z')); }
+
+  async function renderKp(){
+    const meta = document.getElementById('kp-meta');
+    try{
+      const r = await fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
+      if(!r.ok) throw new Error('http ' + r.status);
+      const rows = parseKp(await r.json()).slice(-24);
+      const last = rows[rows.length-1];
+      const info = kpInfo(last.k);
+      document.getElementById('kp-num').textContent = last.k.toFixed(1);
+      document.getElementById('kp-num').style.color = info.c;
+      document.getElementById('kp-label').textContent = info.t;
+      const ld = toDate(last.t);
+      meta.textContent = `最新の観測: ${ld.toLocaleString('ja-JP')}(あなたの現地時間)`;
+
+      const chart = document.getElementById('kp-chart');
+      chart.textContent = '';
+      rows.forEach(row => {
+        const col = document.createElement('div'); col.className = 'col';
+        const b = document.createElement('div');
+        b.style.height = (row.k/9*100) + '%';
+        b.style.background = kpInfo(row.k).c;
+        b.title = `${toDate(row.t).toLocaleString('ja-JP')}  Kp ${row.k.toFixed(2)}`;
+        col.appendChild(b); chart.appendChild(col);
+      });
+      const f = toDate(rows[0].t);
+      document.getElementById('kp-from').textContent = `${f.getMonth()+1}/${f.getDate()}`;
+      document.getElementById('kp-to').textContent = `${ld.getMonth()+1}/${ld.getDate()}`;
+    }catch(e){
+      meta.textContent = '';
+      const el = document.getElementById('kp-label');
+      el.className = 'kp-label err';
+      el.textContent = 'NOAAのデータを取得できませんでした。';
+    }
+  }
+
+  document.getElementById('lang').addEventListener('change', renderWiki);
+  renderWiki();
+  renderKp();
+})();
+</script>
+</body>
+</html>
